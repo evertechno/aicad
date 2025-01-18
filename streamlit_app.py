@@ -117,7 +117,7 @@ if st.button("Generate 3D Model"):
             vertices, faces = extract_mesh_parameters(model_description)
             
             # Step 3: Create Trimesh object from the vertices and faces
-            if vertices is not None and faces are not None:
+            if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
                 # Step 4: Visualize the 3D model using Plotly
