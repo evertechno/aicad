@@ -37,8 +37,16 @@ def extract_mesh_parameters(model_description):
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
-    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
+    vertex_pattern = re.findall(r'Vertex
+
+\[(.*?)\]
+
+', model_description)
+    face_pattern = re.findall(r'Face
+
+\[(.*?)\]
+
+', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
@@ -66,10 +74,20 @@ def extract_mesh_parameters(model_description):
 
 # Function to create a Trimesh object from vertices and faces
 def create_trimesh_from_parameters(vertices, faces):
-    # Create a Trimesh object from vertices and faces
-    mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
-    
-    return mesh
+    try:
+        # Ensure vertices and faces are not empty
+        if vertices.size == 0 or faces.size == 0:
+            raise ValueError("Vertices or faces array is empty.")
+        
+        # Ensure the shapes are correct
+        if vertices.ndim != 2 or faces.ndim != 2:
+            raise ValueError("Vertices or faces array has incorrect dimensions.")
+        
+        mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+        return mesh
+    except Exception as e:
+        st.error(f"Error creating Trimesh object: {e}")
+        return None
 
 # Function to visualize 3D model using Plotly
 def visualize_3d_model(vertices, faces):
@@ -99,7 +117,7 @@ def visualize_3d_model(vertices, faces):
     st.plotly_chart(fig)
 
 # Function to tweak parameters and regenerate the model
-def tweak_parameters(vertices, faces):
+def tweak_parameters():
     st.subheader("Tweak Model Parameters")
     x_scale = st.slider("X Scale", 0.5, 2.0, 1.0)
     y_scale = st.slider("Y Scale", 0.5, 2.0, 1.0)
@@ -122,22 +140,27 @@ if st.button("Generate 3D Model"):
             # Step 3: Create Trimesh object from the vertices and faces
             if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
+                if mesh is not None:
+                    # Step 4: Visualize the 3D model using Plotly
+                    visualize_3d_model(vertices, faces)
+                    
+                    # Optionally, you can display the mesh in Streamlit for download or further manipulation
+                    st.write("Trimesh object created successfully!")
+                    st.write(mesh)
+                    
+                    # Save the mesh to a file for download (optional)
+                    try:
+                        mesh.export('generated_model.stl')
+                        st.download_button("Download STL", 'generated_model.stl')
+                        mesh.export('generated_model.obj')
+                        st.download_button("Download OBJ", 'generated_model.obj')
+                    except Exception as e:
+                        st.error(f"Error exporting mesh: {e}")
 
-                # Step 4: Visualize the 3D model using Plotly
-                visualize_3d_model(vertices, faces)
-                
-                # Optionally, you can display the mesh in Streamlit for download or further manipulation
-                st.write("Trimesh object created successfully!")
-                st.write(mesh)
-                
-                # Save the mesh to a file for download (optional)
-                mesh.export('generated_model.stl')
-                st.download_button("Download STL", 'generated_model.stl')
-                mesh.export('generated_model.obj')
-                st.download_button("Download OBJ", 'generated_model.obj')
-
-                # Allow tweaking of parameters
-                tweak_parameters(vertices, faces)
+                    # Allow tweaking of parameters
+                    tweak_parameters()
+                else:
+                    st.error("Error: Failed to create Trimesh object.")
             else:
                 st.error("Error: Invalid mesh data returned by AI.")
     else:
