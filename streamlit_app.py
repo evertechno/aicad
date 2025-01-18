@@ -4,6 +4,7 @@ import trimesh
 import plotly.graph_objects as go
 import numpy as np
 import re
+import tempfile
 
 # Configure the Gemini API key securely from Streamlit secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -23,7 +24,7 @@ def generate_mesh_code(prompt):
             return None
         # Requesting model description from Gemini
         model = genai.GenerativeModel('gemini-1.5-flash')
-        response = model.generate_content(prompt)
+        response = model.generate_text(prompt)
         model_description = response.text
         st.write("AI Response:", model_description)
         return model_description
