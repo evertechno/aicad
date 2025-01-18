@@ -2,3 +2,4 @@ streamlit
 cadquery 
 google-generativeai 
 plotly
+libglvnd-dev
