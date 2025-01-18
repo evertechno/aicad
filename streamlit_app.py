@@ -18,9 +18,6 @@ prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car 
 # Function to generate mesh code from text description using Gemini
 def generate_mesh_code(prompt):
     try:
-        if not prompt:
-            st.error("Prompt cannot be empty.")
-            return None
         # Requesting model description from Gemini
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
@@ -37,8 +34,8 @@ def extract_mesh_parameters(model_description):
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex\s*\[(.*?)\]\s*', model_description)
-    face_pattern = re.findall(r'Face\s*\[(.*?)\]\s*', model_description)
+    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
+    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
@@ -59,21 +56,23 @@ def extract_mesh_parameters(model_description):
     faces = np.array(faces)
     
     # Debugging: Print arrays to ensure they have the correct shape
-    st.write("Vertices Array Shape:", vertices.shape)
-    st.write("Faces Array Shape:", faces.shape)
+    st.write("Vertices Array:", vertices)
+    st.write("Faces Array:", faces)
     
-    # Check if arrays are empty
-    if vertices.size == 0 or faces.size == 0:
-        st.error("Error: No valid vertices or faces found.")
+    # Check if the arrays are non-empty and have the expected shape
+    if vertices.shape[0] == 0 or faces.shape[0] == 0:
+        st.error("Error: No valid vertices or faces were extracted from the AI response.")
         return None, None
 
     return vertices, faces
 
 # Function to create a Trimesh object from vertices and faces
 def create_trimesh_from_parameters(vertices, faces):
-    # Check if vertices and faces are valid
-    if vertices is None or faces is None:
+    # Check if vertices and faces are valid (non-empty)
+    if vertices is None or faces is None or len(vertices) == 0 or len(faces) == 0:
+        st.error("Error: Invalid mesh data. Cannot create mesh.")
         return None
+    
     # Create a Trimesh object from vertices and faces
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
     
@@ -120,9 +119,8 @@ if st.button("Generate 3D Model"):
             if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
-                # Step 4: Check if the mesh was created successfully
-                if mesh is not None:
-                    # Visualize the 3D model using Plotly
+                # Step 4: Visualize the 3D model using Plotly
+                if mesh:
                     visualize_3d_model(vertices, faces)
                     
                     # Optionally, you can display the mesh in Streamlit for download or further manipulation
@@ -130,8 +128,11 @@ if st.button("Generate 3D Model"):
                     st.write(mesh)
                     
                     # Save the mesh to a file for download (optional)
-                    mesh.export('generated_model.stl')
-                    st.download_button("Download STL", 'generated_model.stl')
+                    try:
+                        mesh.export('generated_model.stl')
+                        st.download_button("Download STL", 'generated_model.stl')
+                    except Exception as e:
+                        st.error(f"Error exporting the model: {e}")
                 else:
                     st.error("Error: Mesh creation failed.")
             else:
