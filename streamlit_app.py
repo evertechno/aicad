@@ -19,7 +19,7 @@ prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car 
 def generate_mesh_code(prompt):
     try:
         # Requesting model description from Gemini
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         model_description = response.text
         
@@ -39,30 +39,31 @@ def extract_mesh_parameters(model_description):
     # Log the raw response to help debug
     st.write("Raw AI Response for Parsing:", model_description)
     
-    # Adjust this regular expression based on the actual format of the response
-    # The assumption here is that the AI will provide a list of vertices and faces, e.g., Vertex[0,0,0], Face[0,1,2]
-    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
-    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
+    # Adjust these regular expressions based on actual format
+    vertex_pattern = re.findall(r'points?\s*[:]\s*\[(.*?)\]', model_description)
+    face_pattern = re.findall(r'polygons?\s*[:]\s*\[(.*?)\]', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
     st.write("Extracted Face Pattern:", face_pattern)
     
-    # Parsing vertices
+    # Parsing vertices (ensure each vertex is a 3D coordinate)
     for vertex in vertex_pattern:
         vertex_values = list(map(float, vertex.split(',')))
-        vertices.append(vertex_values)
+        if len(vertex_values) == 3:  # Ensure it has 3 coordinates
+            vertices.append(vertex_values)
     
-    # Parsing faces (triangular faces)
+    # Parsing faces (ensure each face is a triplet of indices)
     for face in face_pattern:
         face_indices = list(map(int, face.split(',')))
-        faces.append(face_indices)
+        if len(face_indices) == 3:  # Ensure it's a triangular face
+            faces.append(face_indices)
 
-    # Convert vertices and faces into numpy arrays (ensure the correct shape)
+    # Convert vertices and faces into numpy arrays
     vertices = np.array(vertices)
     faces = np.array(faces)
     
-    # Debugging: Print arrays to ensure they have the correct shape
+    # Debugging: Print arrays to verify shape
     st.write("Vertices Array:", vertices)
     st.write("Faces Array:", faces)
     
