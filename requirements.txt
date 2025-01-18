@@ -1,5 +1,5 @@
 streamlit
-cadquery 
-google-generativeai 
+cadquery
+google-generativeai
 plotly
-libglvnd-dev
+pythreejs
