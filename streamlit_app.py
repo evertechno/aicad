@@ -15,11 +15,35 @@ st.write("Generate 3D models from text descriptions. Enter the description and l
 # User input for CAD model description
 prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car with length 100mm, width 50mm, height 30mm'):")
 
+# Hardcoded mesh structure (fallback to cube)
+def get_default_mesh():
+    """Generate a simple cube mesh for fallback"""
+    # Defining a simple cube's vertices and faces (this will be the fallback model)
+    vertices = np.array([
+        [0, 0, 0],
+        [1, 0, 0],
+        [1, 1, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 1],
+        [1, 1, 1],
+        [0, 1, 1],
+    ])
+    faces = np.array([
+        [0, 1, 2], [0, 2, 3],  # Bottom face
+        [4, 5, 6], [4, 6, 7],  # Top face
+        [0, 1, 5], [0, 5, 4],  # Front face
+        [1, 2, 6], [1, 6, 5],  # Right face
+        [2, 3, 7], [2, 7, 6],  # Back face
+        [3, 0, 4], [3, 4, 7],  # Left face
+    ])
+    return vertices, faces
+
 # Function to generate mesh code from text description using Gemini
 def generate_mesh_code(prompt):
     try:
         # Requesting model description from Gemini
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         response = model.generate_content(prompt)
         model_description = response.text
         
@@ -123,27 +147,38 @@ if st.button("Generate 3D Model"):
         if model_description:
             vertices, faces = extract_mesh_parameters(model_description)
             
-            # Step 3: Create Trimesh object from the vertices and faces
-            if vertices is not None and faces is not None:
-                mesh = create_trimesh_from_parameters(vertices, faces)
+            # Step 3: If no valid mesh, fallback to default mesh (e.g., cube)
+            if vertices is None or faces is None or vertices.shape[0] == 0 or faces.shape[0] == 0:
+                st.warning("Using default mesh (cube) due to invalid AI response.")
+                vertices, faces = get_default_mesh()
 
-                # Step 4: Visualize the 3D model using Plotly
-                if mesh:
-                    visualize_3d_model(vertices, faces)
-                    
-                    # Optionally, you can display the mesh in Streamlit for download or further manipulation
-                    st.write("Trimesh object created successfully!")
-                    st.write(mesh)
-                    
-                    # Save the mesh to a file for download (optional)
-                    try:
-                        mesh.export('generated_model.stl')
-                        st.download_button("Download STL", 'generated_model.stl')
-                    except Exception as e:
-                        st.error(f"Error exporting the model: {e}")
-                else:
-                    st.error("Error: Mesh creation failed.")
+            # Step 4: Create Trimesh object from the vertices and faces
+            mesh = create_trimesh_from_parameters(vertices, faces)
+
+            # Step 5: Visualize the 3D model using Plotly
+            if mesh:
+                visualize_3d_model(vertices, faces)
+                
+                # Optionally, you can display the mesh in Streamlit for download or further manipulation
+                st.write("Trimesh object created successfully!")
+                st.write(mesh)
+                
+                # Save the mesh to a file for download (optional)
+                try:
+                    mesh.export('generated_model.stl')
+                    st.download_button("Download STL", 'generated_model.stl')
+                except Exception as e:
+                    st.error(f"Error exporting the model: {e}")
             else:
-                st.error("Error: Invalid mesh data returned by AI.")
+                st.error("Error: Mesh creation failed.")
+        else:
+            st.warning("AI response was empty or invalid, using fallback mesh.")
+            vertices, faces = get_default_mesh()
+            mesh = create_trimesh_from_parameters(vertices, faces)
+            if mesh:
+                visualize_3d_model(vertices, faces)
+                st.write("Trimesh object created successfully!")
+                st.download_button("Download STL", 'generated_model.stl')
+
     else:
         st.error("Please enter a description for the 3D model.")
