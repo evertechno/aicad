@@ -22,7 +22,10 @@ def generate_mesh_code(prompt):
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         model_description = response.text
-        st.write("AI Response:", model_description)
+        
+        # Log the full AI response to understand its structure
+        st.write("Full AI Response:\n", model_description)  # This will log the full text output
+        
         return model_description
     except Exception as e:
         st.error(f"Error generating model: {e}")
@@ -33,7 +36,11 @@ def extract_mesh_parameters(model_description):
     vertices = []
     faces = []
     
-    # Regex patterns to extract data from Gemini's output (assumed format)
+    # Log the raw response to help debug
+    st.write("Raw AI Response for Parsing:", model_description)
+    
+    # Adjust this regular expression based on the actual format of the response
+    # The assumption here is that the AI will provide a list of vertices and faces, e.g., Vertex[0,0,0], Face[0,1,2]
     vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
     face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
 
