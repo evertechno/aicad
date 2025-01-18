@@ -59,13 +59,21 @@ def extract_mesh_parameters(model_description):
     faces = np.array(faces)
     
     # Debugging: Print arrays to ensure they have the correct shape
-    st.write("Vertices Array:", vertices)
-    st.write("Faces Array:", faces)
+    st.write("Vertices Array Shape:", vertices.shape)
+    st.write("Faces Array Shape:", faces.shape)
     
+    # Check if arrays are empty
+    if vertices.size == 0 or faces.size == 0:
+        st.error("Error: No valid vertices or faces found.")
+        return None, None
+
     return vertices, faces
 
 # Function to create a Trimesh object from vertices and faces
 def create_trimesh_from_parameters(vertices, faces):
+    # Check if vertices and faces are valid
+    if vertices is None or faces is None:
+        return None
     # Create a Trimesh object from vertices and faces
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
     
@@ -112,16 +120,20 @@ if st.button("Generate 3D Model"):
             if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
-                # Step 4: Visualize the 3D model using Plotly
-                visualize_3d_model(vertices, faces)
-                
-                # Optionally, you can display the mesh in Streamlit for download or further manipulation
-                st.write("Trimesh object created successfully!")
-                st.write(mesh)
-                
-                # Save the mesh to a file for download (optional)
-                mesh.export('generated_model.stl')
-                st.download_button("Download STL", 'generated_model.stl')
+                # Step 4: Check if the mesh was created successfully
+                if mesh is not None:
+                    # Visualize the 3D model using Plotly
+                    visualize_3d_model(vertices, faces)
+                    
+                    # Optionally, you can display the mesh in Streamlit for download or further manipulation
+                    st.write("Trimesh object created successfully!")
+                    st.write(mesh)
+                    
+                    # Save the mesh to a file for download (optional)
+                    mesh.export('generated_model.stl')
+                    st.download_button("Download STL", 'generated_model.stl')
+                else:
+                    st.error("Error: Mesh creation failed.")
             else:
                 st.error("Error: Invalid mesh data returned by AI.")
     else:
