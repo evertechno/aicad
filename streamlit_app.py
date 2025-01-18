@@ -2,22 +2,26 @@ import streamlit as st
 import google.generativeai as genai
 import trimesh
 import plotly.graph_objects as go
+import numpy as np
 import re
 
-# Configure the Gemini API key securely from Streamlit's secrets
+# Configure the Gemini API key securely from Streamlit secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Streamlit app UI
-st.title("AI-Powered CAD Co-Pilot for Hardware Design")
-st.write("Transform your plain text descriptions into parametric 3D models.")
+st.title("AI-Powered CAD Tool")
+st.write("Generate 3D models from text descriptions. Enter the description and let AI generate the mesh code!")
 
 # User input for CAD model description
-prompt = st.text_area("Enter your 3D model description (e.g., 'create a toy car with length 10mm, width 5mm, and height 15mm'):")
+prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car with length 100mm, width 50mm, height 30mm'):")
 
-# Function to generate 3D model from text description using Google Gemini
-def generate_3d_model(prompt):
+# Function to generate mesh code from text description using Gemini
+def generate_mesh_code(prompt):
     try:
-        # Using Gemini to interpret the prompt and return model parameters
+        if not prompt:
+            st.error("Prompt cannot be empty.")
+            return None
+        # Requesting model description from Gemini
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         model_description = response.text
@@ -27,50 +31,65 @@ def generate_3d_model(prompt):
         st.error(f"Error generating model: {e}")
         return None
 
-# Function to extract parameters from description
-def extract_parameters(description):
-    # Extract dimensions and parts for the toy car (body, wheels, etc.)
-    car_dimensions = re.findall(r'length\s?(\d+\.?\d*)\s?mm.*?width\s?(\d+\.?\d*)\s?mm.*?height\s?(\d+\.?\d*)\s?mm', description)
-    wheel_size = re.findall(r'wheel\s?radius\s?(\d+\.?\d*)\s?mm', description)
-
-    # If dimensions found, return them
-    if car_dimensions:
-        length, width, height = map(float, car_dimensions[0])
-        wheel_radius = float(wheel_size[0]) if wheel_size else 2
-        return {"shape": "toy_car", "body_dimensions": [length, width, height], "wheel_radius": wheel_radius}
+# Function to extract parameters (dimensions) from the generated mesh code
+def extract_mesh_parameters(model_description):
+    vertices = []
+    faces = []
     
-    # Default toy car if no valid input is found
-    return {"shape": "toy_car", "body_dimensions": [10, 5, 15], "wheel_radius": 2}
+    # Regex patterns to extract data from Gemini's output (assumed format)
+    vertex_pattern = re.findall(r'Vertex
 
-# Function to create a 3D model of the toy car using Trimesh
-def create_3d_model_from_description(description):
-    params = extract_parameters(description)
+\[(.*?)\]
 
-    # Toy car body (simple box)
-    body = trimesh.primitives.Box(extents=params["body_dimensions"])
+', model_description)
+    face_pattern = re.findall(r'Face
 
-    # Create the wheels as cylinders (defaulting to 2 wheels if not specified)
-    wheel_radius = params["wheel_radius"]
-    wheel_height = 2  # fixed height for the wheels
-    wheels = []
-    for i in range(4):  # Assuming 4 wheels
-        # Place wheels symmetrically around the body
-        offset_x = params["body_dimensions"][0] / 2 if i % 2 == 0 else -params["body_dimensions"][0] / 2
-        offset_y = params["body_dimensions"][1] / 2 if i < 2 else -params["body_dimensions"][1] / 2
-        wheel = trimesh.primitives.Cylinder(radius=wheel_radius, height=wheel_height)
-        wheel.apply_translation([offset_x, offset_y, -params["body_dimensions"][2] / 2])
-        wheels.append(wheel)
+\[(.*?)\]
+
+', model_description)
+
+    # Debugging: Print extracted patterns to verify if they match the expected format
+    st.write("Extracted Vertex Pattern:", vertex_pattern)
+    st.write("Extracted Face Pattern:", face_pattern)
     
-    # Combine body and wheels
-    all_parts = [body] + wheels
-    car_model = trimesh.util.concatenate(all_parts)
-    return car_model
+    # Parsing vertices
+    for vertex in vertex_pattern:
+        vertex_values = list(map(float, vertex.split(',')))
+        vertices.append(vertex_values)
+    
+    # Parsing faces (triangular faces)
+    for face in face_pattern:
+        face_indices = list(map(int, face.split(',')))
+        faces.append(face_indices)
 
-# Function to visualize the 3D model using Plotly
-def visualize_3d_model(model):
-    # Convert the trimesh model to vertices and faces for Plotly visualization
-    vertices = model.vertices
-    faces = model.faces
+    # Convert vertices and faces into numpy arrays (ensure the correct shape)
+    vertices = np.array(vertices)
+    faces = np.array(faces)
+    
+    # Debugging: Print arrays to ensure they have the correct shape
+    st.write("Vertices Array:", vertices)
+    st.write("Faces Array:", faces)
+    
+    return vertices, faces
+
+# Function to create a Trimesh object from vertices and faces
+def create_trimesh_from_parameters(vertices, faces):
+    # Create a Trimesh object from vertices and faces
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    
+    return mesh
+
+# Function to visualize 3D model using Plotly
+def visualize_3d_model(vertices, faces):
+    if vertices.ndim == 1:  # If vertices is 1D, reshape to 2D
+        vertices = vertices.reshape(-1, 3)
+    if faces.ndim == 1:  # If faces is 1D, reshape to 2D
+        faces = faces.reshape(-1, 3)
+
+    # Debugging: Check the shape before passing to Plotly
+    st.write("Vertices Shape:", vertices.shape)
+    st.write("Faces Shape:", faces.shape)
+
     fig = go.Figure(data=[go.Mesh3d(
         x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
@@ -87,19 +106,51 @@ def visualize_3d_model(model):
     )
     st.plotly_chart(fig)
 
-# Button to generate 3D model
+# Function to tweak parameters and regenerate the model
+def tweak_parameters():
+    st.subheader("Tweak Model Parameters")
+    x_scale = st.slider("X Scale", 0.5, 2.0, 1.0)
+    y_scale = st.slider("Y Scale", 0.5, 2.0, 1.0)
+    z_scale = st.slider("Z Scale", 0.5, 2.0, 1.0)
+    
+    if st.button("Apply Tweaks"):
+        vertices *= np.array([x_scale, y_scale, z_scale])
+        visualize_3d_model(vertices, faces)
+
+# Button to generate 3D model from Gemini
 if st.button("Generate 3D Model"):
     if prompt:
-        # Generate the model description via Gemini
-        model_description = generate_3d_model(prompt)
+        # Step 1: Use Gemini AI to generate the mesh code from the description
+        model_description = generate_mesh_code(prompt)
         
-        # If a description is generated, proceed to create the 3D model
+        # Step 2: Extract vertices and faces from the mesh code returned by Gemini
         if model_description:
-            # Generate 3D model from description
-            model = create_3d_model_from_description(model_description)
+            vertices, faces = extract_mesh_parameters(model_description)
+            
+            # Step 3: Create Trimesh object from the vertices and faces
+            if vertices is not None and faces are not None:
+                mesh = create_trimesh_from_parameters(vertices, faces)
 
-            # Visualize the 3D model using Plotly
-            if model:
-                visualize_3d_model(model)
+                # Step 4: Visualize the 3D model using Plotly
+                visualize_3d_model(vertices, faces)
+                
+                # Optionally, you can display the mesh in Streamlit for download or further manipulation
+                st.write("Trimesh object created successfully!")
+                st.write(mesh)
+                
+                # Save the mesh to a file for download (optional)
+                mesh.export('generated_model.stl')
+                st.download_button("Download STL", 'generated_model.stl')
+                mesh.export('generated_model.obj')
+                st.download_button("Download OBJ", 'generated_model.obj')
+
+                # Allow tweaking of parameters
+                tweak_parameters()
+            else:
+                st.error("Error: Invalid mesh data returned by AI.")
     else:
         st.error("Please enter a description for the 3D model.")
+
+# Reset button to clear the form and restart
+if st.button("Reset"):
+    st.experimental_rerun()
