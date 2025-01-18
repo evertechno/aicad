@@ -4,7 +4,6 @@ import trimesh
 import plotly.graph_objects as go
 import numpy as np
 import re
-import tempfile
 
 # Configure the Gemini API key securely from Streamlit secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
@@ -19,14 +18,14 @@ prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car 
 # Function to generate mesh code from text description using Gemini
 def generate_mesh_code(prompt):
     try:
-        if not prompt:
-            st.error("Prompt cannot be empty.")
-            return None
         # Requesting model description from Gemini
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
         model_description = response.text
-        st.write("AI Response:", model_description)
+        
+        # Log the full AI response to understand its structure
+        st.write("Full AI Response:\n", model_description)  # This will log the full text output
+        
         return model_description
     except Exception as e:
         st.error(f"Error generating model: {e}")
@@ -37,44 +36,51 @@ def extract_mesh_parameters(model_description):
     vertices = []
     faces = []
     
-    # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex\s*\[(.*?)\]\s*', model_description)
-    face_pattern = re.findall(r'Face\s*\[(.*?)\]\s*', model_description)
+    # Log the raw response to help debug
+    st.write("Raw AI Response for Parsing:", model_description)
+    
+    # Adjust these regular expressions based on actual format
+    vertex_pattern = re.findall(r'points?\s*[:]\s*\[(.*?)\]', model_description)
+    face_pattern = re.findall(r'polygons?\s*[:]\s*\[(.*?)\]', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
     st.write("Extracted Face Pattern:", face_pattern)
     
-    # Parsing vertices
+    # Parsing vertices (ensure each vertex is a 3D coordinate)
     for vertex in vertex_pattern:
         vertex_values = list(map(float, vertex.split(',')))
-        vertices.append(vertex_values)
+        if len(vertex_values) == 3:  # Ensure it has 3 coordinates
+            vertices.append(vertex_values)
     
-    # Parsing faces (triangular faces)
+    # Parsing faces (ensure each face is a triplet of indices)
     for face in face_pattern:
         face_indices = list(map(int, face.split(',')))
-        faces.append(face_indices)
+        if len(face_indices) == 3:  # Ensure it's a triangular face
+            faces.append(face_indices)
 
-    # Convert vertices and faces into numpy arrays (ensure the correct shape)
+    # Convert vertices and faces into numpy arrays
     vertices = np.array(vertices)
     faces = np.array(faces)
     
-    # Debugging: Print arrays to ensure they have the correct shape
-    st.write("Vertices Array Shape:", vertices.shape)
-    st.write("Faces Array Shape:", faces.shape)
+    # Debugging: Print arrays to verify shape
+    st.write("Vertices Array:", vertices)
+    st.write("Faces Array:", faces)
     
-    # Check if arrays are empty
-    if vertices.size == 0 or faces.size == 0:
-        st.error("Error: No valid vertices or faces found.")
+    # Check if the arrays are non-empty and have the expected shape
+    if vertices.shape[0] == 0 or faces.shape[0] == 0:
+        st.error("Error: No valid vertices or faces were extracted from the AI response.")
         return None, None
 
     return vertices, faces
 
 # Function to create a Trimesh object from vertices and faces
 def create_trimesh_from_parameters(vertices, faces):
-    # Check if vertices and faces are valid
-    if vertices is None or faces is None:
+    # Check if vertices and faces are valid (non-empty)
+    if vertices is None or faces is None or len(vertices) == 0 or len(faces) == 0:
+        st.error("Error: Invalid mesh data. Cannot create mesh.")
         return None
+    
     # Create a Trimesh object from vertices and faces
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
     
@@ -121,9 +127,8 @@ if st.button("Generate 3D Model"):
             if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
-                # Step 4: Check if the mesh was created successfully
-                if mesh is not None:
-                    # Visualize the 3D model using Plotly
+                # Step 4: Visualize the 3D model using Plotly
+                if mesh:
                     visualize_3d_model(vertices, faces)
                     
                     # Optionally, you can display the mesh in Streamlit for download or further manipulation
@@ -131,10 +136,11 @@ if st.button("Generate 3D Model"):
                     st.write(mesh)
                     
                     # Save the mesh to a file for download (optional)
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".stl") as temp_file:
-                        temp_file_path = temp_file.name
-                        mesh.export(temp_file_path)
-                        st.download_button("Download STL", temp_file_path)
+                    try:
+                        mesh.export('generated_model.stl')
+                        st.download_button("Download STL", 'generated_model.stl')
+                    except Exception as e:
+                        st.error(f"Error exporting the model: {e}")
                 else:
                     st.error("Error: Mesh creation failed.")
             else:
