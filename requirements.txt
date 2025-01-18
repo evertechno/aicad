@@ -1,5 +1,5 @@
 streamlit
-cadquery
 google-generativeai
 plotly
 pythreejs
+cadquery-occt
