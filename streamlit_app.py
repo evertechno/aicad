@@ -37,16 +37,8 @@ def extract_mesh_parameters(model_description):
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex
-
-\[(.*?)\]
-
-', model_description)
-    face_pattern = re.findall(r'Face
-
-\[(.*?)\]
-
-', model_description)
+    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
+    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
@@ -107,7 +99,7 @@ def visualize_3d_model(vertices, faces):
     st.plotly_chart(fig)
 
 # Function to tweak parameters and regenerate the model
-def tweak_parameters():
+def tweak_parameters(vertices, faces):
     st.subheader("Tweak Model Parameters")
     x_scale = st.slider("X Scale", 0.5, 2.0, 1.0)
     y_scale = st.slider("Y Scale", 0.5, 2.0, 1.0)
@@ -128,7 +120,7 @@ if st.button("Generate 3D Model"):
             vertices, faces = extract_mesh_parameters(model_description)
             
             # Step 3: Create Trimesh object from the vertices and faces
-            if vertices is not None and faces are not None:
+            if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
                 # Step 4: Visualize the 3D model using Plotly
@@ -145,7 +137,7 @@ if st.button("Generate 3D Model"):
                 st.download_button("Download OBJ", 'generated_model.obj')
 
                 # Allow tweaking of parameters
-                tweak_parameters()
+                tweak_parameters(vertices, faces)
             else:
                 st.error("Error: Invalid mesh data returned by AI.")
     else:
