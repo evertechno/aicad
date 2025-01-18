@@ -37,16 +37,8 @@ def extract_mesh_parameters(model_description):
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex
-
-\[(.*?)\]
-
-', model_description)
-    face_pattern = re.findall(r'Face
-
-\[(.*?)\]
-
-', model_description)
+    vertex_pattern = re.findall(r'Vertex\s*\[(.*?)\]\s*', model_description)
+    face_pattern = re.findall(r'Face\s*\[(.*?)\]\s*', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
@@ -117,7 +109,7 @@ if st.button("Generate 3D Model"):
             vertices, faces = extract_mesh_parameters(model_description)
             
             # Step 3: Create Trimesh object from the vertices and faces
-            if vertices is not None and faces are not None:
+            if vertices is not None and faces is not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
                 # Step 4: Visualize the 3D model using Plotly
