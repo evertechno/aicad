@@ -23,7 +23,7 @@ def generate_mesh_code(prompt):
             st.error("Prompt cannot be empty.")
             return None
         # Requesting model description from Gemini
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         response = model.generate_content(prompt)
         model_description = response.text
         st.write("AI Response:", model_description)
