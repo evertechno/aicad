@@ -1,5 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
+import trimesh
 import plotly.graph_objects as go
 import numpy as np
 import re
@@ -29,13 +30,16 @@ def generate_mesh_code(prompt):
 
 # Function to extract parameters (dimensions) from the generated mesh code
 def extract_mesh_parameters(model_description):
-    # Extract vertices and faces information from the description
     vertices = []
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
     vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
     face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
+
+    # Debugging: Print extracted patterns to verify if they match the expected format
+    st.write("Extracted Vertex Pattern:", vertex_pattern)
+    st.write("Extracted Face Pattern:", face_pattern)
     
     # Parsing vertices
     for vertex in vertex_pattern:
@@ -46,21 +50,34 @@ def extract_mesh_parameters(model_description):
     for face in face_pattern:
         face_indices = list(map(int, face.split(',')))
         faces.append(face_indices)
-    
+
     # Convert vertices and faces into numpy arrays (ensure the correct shape)
     vertices = np.array(vertices)
     faces = np.array(faces)
     
+    # Debugging: Print arrays to ensure they have the correct shape
+    st.write("Vertices Array:", vertices)
+    st.write("Faces Array:", faces)
+    
     return vertices, faces
+
+# Function to create a Trimesh object from vertices and faces
+def create_trimesh_from_parameters(vertices, faces):
+    # Create a Trimesh object from vertices and faces
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+    
+    return mesh
 
 # Function to visualize 3D model using Plotly
 def visualize_3d_model(vertices, faces):
     if vertices.ndim == 1:  # If vertices is 1D, reshape to 2D
         vertices = vertices.reshape(-1, 3)
-
-    # Ensure faces is properly shaped as well
     if faces.ndim == 1:  # If faces is 1D, reshape to 2D
         faces = faces.reshape(-1, 3)
+
+    # Debugging: Check the shape before passing to Plotly
+    st.write("Vertices Shape:", vertices.shape)
+    st.write("Faces Shape:", faces.shape)
 
     fig = go.Figure(data=[go.Mesh3d(
         x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
@@ -88,9 +105,20 @@ if st.button("Generate 3D Model"):
         if model_description:
             vertices, faces = extract_mesh_parameters(model_description)
             
-            # Step 3: Visualize the 3D model using Plotly
+            # Step 3: Create Trimesh object from the vertices and faces
             if vertices is not None and faces is not None:
+                mesh = create_trimesh_from_parameters(vertices, faces)
+
+                # Step 4: Visualize the 3D model using Plotly
                 visualize_3d_model(vertices, faces)
+                
+                # Optionally, you can display the mesh in Streamlit for download or further manipulation
+                st.write("Trimesh object created successfully!")
+                st.write(mesh)
+                
+                # Save the mesh to a file for download (optional)
+                mesh.export('generated_model.stl')
+                st.download_button("Download STL", 'generated_model.stl')
             else:
                 st.error("Error: Invalid mesh data returned by AI.")
     else:
