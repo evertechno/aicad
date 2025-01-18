@@ -46,11 +46,22 @@ def extract_mesh_parameters(model_description):
     for face in face_pattern:
         face_indices = list(map(int, face.split(',')))
         faces.append(face_indices)
-
-    return np.array(vertices), np.array(faces)
+    
+    # Convert vertices and faces into numpy arrays (ensure the correct shape)
+    vertices = np.array(vertices)
+    faces = np.array(faces)
+    
+    return vertices, faces
 
 # Function to visualize 3D model using Plotly
 def visualize_3d_model(vertices, faces):
+    if vertices.ndim == 1:  # If vertices is 1D, reshape to 2D
+        vertices = vertices.reshape(-1, 3)
+
+    # Ensure faces is properly shaped as well
+    if faces.ndim == 1:  # If faces is 1D, reshape to 2D
+        faces = faces.reshape(-1, 3)
+
     fig = go.Figure(data=[go.Mesh3d(
         x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
         i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
