@@ -1,100 +1,86 @@
 import streamlit as st
 import google.generativeai as genai
-import cadquery as cq
-from io import BytesIO
-import json
+import plotly.graph_objects as go
+import numpy as np
+import re
 
-# Configure the API key securely from Streamlit's secrets
+# Configure the Gemini API key securely from Streamlit secrets
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
-# Streamlit App UI
-st.title("AI CAD Co-Pilot for Hardware Design")
-st.write("Transform plain text descriptions into parametric 3D models like AutoCAD, Fusion 360, or SolidWorks.")
+# Streamlit app UI
+st.title("AI-Powered CAD Tool")
+st.write("Generate 3D models from text descriptions. Enter the description and let AI generate the mesh code!")
 
-# Input field for text description
-description = st.text_area("Describe your 3D model (e.g., 'A 20mm diameter cylindrical part with a 5mm hole at the center')")
+# User input for CAD model description
+prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car with length 100mm, width 50mm, height 30mm'):")
 
-# Button to generate model
-if st.button("Generate Model"):
+# Function to generate mesh code from text description using Gemini
+def generate_mesh_code(prompt):
     try:
-        # Step 1: Use AI model to interpret the description and extract parameters
+        # Requesting model description from Gemini
         model = genai.GenerativeModel('gemini-1.5-flash')
-
-        prompt = f"Generate parameters for a parametric 3D model based on this description: {description}"
-        
-        # Generate response from the AI model
         response = model.generate_content(prompt)
-
-        # Assuming the AI response contains JSON-like structure of parameters
-        model_parameters = json.loads(response.text)  # The AI should output a structured JSON (e.g., {"type": "cylinder", "radius": 10, "height": 20})
-
-        st.write("AI generated parameters:", model_parameters)
-
-        # Step 2: Convert the parameters into a parametric 3D model (using CadQuery or similar)
-        
-        # Base Shape Creation Example (Additional operations based on the input description)
-        if model_parameters["type"] == "cylinder":
-            radius = model_parameters.get("radius", 10)  # Default to 10mm if no radius is specified
-            height = model_parameters.get("height", 20)  # Default to 20mm if no height is specified
-            hole_radius = model_parameters.get("hole_radius", 5)  # Optional hole radius
-
-            result = cq.Workplane("XY").circle(radius).extrude(height)
-            if hole_radius:
-                result = result.faces(">Z").hole(hole_radius)
-        
-        elif model_parameters["type"] == "box":
-            length = model_parameters.get("length", 10)
-            width = model_parameters.get("width", 10)
-            height = model_parameters.get("height", 10)
-            result = cq.Workplane("XY").box(length, width, height)
-        
-        # Example for adding additional features:
-        elif model_parameters["feature"] == "fillet":
-            radius = model_parameters.get("radius", 2)
-            result = result.edges().fillet(radius)
-
-        elif model_parameters["feature"] == "chamfer":
-            distance = model_parameters.get("distance", 1)
-            angle = model_parameters.get("angle", 45)
-            result = result.edges().chamfer(distance, angle)
-
-        elif model_parameters["feature"] == "hole":
-            hole_type = model_parameters.get("hole_type", "simple")
-            diameter = model_parameters.get("diameter", 5)
-            result = result.faces(">Z").hole(diameter)
-
-        elif model_parameters["feature"] == "extrude_cut":
-            # Assuming a 2D sketch and cutting the shape from the object
-            result = result.faces(">Z").cut(result)
-
-        # Additional Example for Extrusion, Revolve, Sweep, etc.:
-        if model_parameters["operation"] == "extrude":
-            sketch = model_parameters.get("sketch", "circle")
-            if sketch == "circle":
-                result = cq.Workplane("XY").circle(model_parameters.get("radius", 10)).extrude(model_parameters.get("height", 20))
-        
-        # More features like pattern, mirror, combine, etc. can be added similarly.
-        
-        # Step 3: Export model to STL
-        stl_bytes = result.toStl()
-
-        # Save STL to file and offer for download
-        stl_filename = "generated_model.stl"
-        st.download_button(
-            label="Download STL Model",
-            data=stl_bytes,
-            file_name=stl_filename,
-            mime="application/stl"
-        )
-
-        # Step 4: Optionally, visualize the 3D model (using `pythreejs` or other libraries)
-        st.write("Preview the generated model (optional):")
-        # (Optional) Displaying a 3D visualization using Plotly or PyThreeJS.
-        # Here, you would integrate Plotly or another 3D library for real-time model visualization.
-
-        # For simplicity, display dimensions
-        st.write(f"Model Type: {model_parameters['type']}")
-        st.write(f"Dimensions: {model_parameters.get('radius', 'N/A')} mm radius, {model_parameters.get('height', 'N/A')} mm height")
-
+        model_description = response.text
+        st.write("AI Response:", model_description)
+        return model_description
     except Exception as e:
-        st.error(f"Error: {e}")
+        st.error(f"Error generating model: {e}")
+        return None
+
+# Function to extract parameters (dimensions) from the generated mesh code
+def extract_mesh_parameters(model_description):
+    # Extract vertices and faces information from the description
+    vertices = []
+    faces = []
+    
+    # Regex patterns to extract data from Gemini's output (assumed format)
+    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
+    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
+    
+    # Parsing vertices
+    for vertex in vertex_pattern:
+        vertex_values = list(map(float, vertex.split(',')))
+        vertices.append(vertex_values)
+    
+    # Parsing faces (triangular faces)
+    for face in face_pattern:
+        face_indices = list(map(int, face.split(',')))
+        faces.append(face_indices)
+
+    return np.array(vertices), np.array(faces)
+
+# Function to visualize 3D model using Plotly
+def visualize_3d_model(vertices, faces):
+    fig = go.Figure(data=[go.Mesh3d(
+        x=vertices[:, 0], y=vertices[:, 1], z=vertices[:, 2],
+        i=faces[:, 0], j=faces[:, 1], k=faces[:, 2],
+        opacity=0.5,
+        color='blue'
+    )])
+    fig.update_layout(
+        title="Generated 3D Model",
+        scene=dict(
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False),
+            zaxis=dict(showgrid=False)
+        ),
+    )
+    st.plotly_chart(fig)
+
+# Button to generate 3D model from Gemini
+if st.button("Generate 3D Model"):
+    if prompt:
+        # Step 1: Use Gemini AI to generate the mesh code from the description
+        model_description = generate_mesh_code(prompt)
+        
+        # Step 2: Extract vertices and faces from the mesh code returned by Gemini
+        if model_description:
+            vertices, faces = extract_mesh_parameters(model_description)
+            
+            # Step 3: Visualize the 3D model using Plotly
+            if vertices is not None and faces is not None:
+                visualize_3d_model(vertices, faces)
+            else:
+                st.error("Error: Invalid mesh data returned by AI.")
+    else:
+        st.error("Please enter a description for the 3D model.")
