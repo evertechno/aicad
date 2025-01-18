@@ -18,6 +18,9 @@ prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car 
 # Function to generate mesh code from text description using Gemini
 def generate_mesh_code(prompt):
     try:
+        if not prompt:
+            st.error("Prompt cannot be empty.")
+            return None
         # Requesting model description from Gemini
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompt)
@@ -34,8 +37,16 @@ def extract_mesh_parameters(model_description):
     faces = []
     
     # Regex patterns to extract data from Gemini's output (assumed format)
-    vertex_pattern = re.findall(r'Vertex\[(.*?)\]', model_description)
-    face_pattern = re.findall(r'Face\[(.*?)\]', model_description)
+    vertex_pattern = re.findall(r'Vertex
+
+\[(.*?)\]
+
+', model_description)
+    face_pattern = re.findall(r'Face
+
+\[(.*?)\]
+
+', model_description)
 
     # Debugging: Print extracted patterns to verify if they match the expected format
     st.write("Extracted Vertex Pattern:", vertex_pattern)
@@ -106,7 +117,7 @@ if st.button("Generate 3D Model"):
             vertices, faces = extract_mesh_parameters(model_description)
             
             # Step 3: Create Trimesh object from the vertices and faces
-            if vertices is not None and faces is not None:
+            if vertices is not None and faces are not None:
                 mesh = create_trimesh_from_parameters(vertices, faces)
 
                 # Step 4: Visualize the 3D model using Plotly
