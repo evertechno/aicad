@@ -19,7 +19,7 @@ prompt = st.text_area("Enter your 3D model description (e.g., 'Create a toy car 
 def generate_mesh_code(prompt):
     try:
         # Requesting model description from Gemini
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
         response = model.generate_content(prompt)
         model_description = response.text
         
