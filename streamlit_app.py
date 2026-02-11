@@ -105,64 +105,120 @@ def call_ai_api(messages, max_tokens=16000):
 
 def enhance_prompt(user_prompt):
     """Tier 1: Enhance user prompt with detailed specifications"""
-    system_message = """You are an expert 3D modeling specification engineer. Your task is to take a basic design idea and expand it into a highly detailed, technically precise specification for mesh generation.
+    system_message = """You are an expert CAD engineer and industrial designer. Transform basic design ideas into COMPLETE, MANUFACTURABLE specifications.
 
-Include:
-- Exact dimensions and proportions
-- Geometric primitives needed (spheres, cubes, cylinders, etc.)
-- Vertex positions and connectivity
-- Surface normals and face definitions
-- Material properties and textures
-- Level of detail requirements
-- Symmetry considerations
-- Topology constraints
+For EVERY design, include:
 
-Output a comprehensive technical specification that a mesh generation system can use."""
+1. OVERALL DIMENSIONS (exact measurements in mm)
+2. FUNCTIONAL FEATURES (handles, grips, openings, connections)
+3. STRUCTURAL DETAILS (wall thickness, ribs, supports)
+4. ERGONOMIC CONSIDERATIONS (grip zones, comfortable angles)
+5. AESTHETIC ELEMENTS (curves, chamfers, fillets, textures)
+6. ASSEMBLY POINTS (if multi-part)
+7. MATERIAL CONSIDERATIONS (draft angles for molding, etc.)
+
+CRITICAL: Think like a product designer creating something REAL that will be manufactured. Include:
+- All curves and fillets (specify radius)
+- Draft angles for manufacturing
+- Grip textures or patterns where hands touch
+- Functional details (drainage holes, ventilation, cable management)
+- Proportions that look professional
+- Weight distribution considerations
+
+Example transformation:
+"Create a coffee mug" → 
+"Design a 350ml ceramic coffee mug with these specs:
+- Main body: Cylindrical, 95mm tall, 80mm outer diameter, 3mm wall thickness
+- Taper: 2-degree inward slope from rim to base for structural stability
+- Handle: D-shaped cross-section (12mm x 15mm), positioned at 45° angle, ergonomic curve with 25mm radius at top, 30mm radius at bottom
+- Rim: 2mm rounded edge for comfort
+- Base: Flat circular base 75mm diameter with 1mm recess for stability
+- Interior: Smooth glazed surface, slight concave bottom (3mm radius)
+- Exterior: Subtle vertical grooves (1mm deep, 5mm spacing) for grip
+- Drainage: Small 2mm hole at handle junction to prevent water pooling"
+
+Make EVERY design this detailed. Think manufacturing, ergonomics, aesthetics."""
 
     messages = [
         {"role": "system", "content": system_message},
-        {"role": "user", "content": f"Enhance this design idea into detailed 3D modeling specifications:\n\n{user_prompt}"}
+        {"role": "user", "content": f"Transform this into a complete, manufacturable specification:\n\n{user_prompt}\n\nBe extremely detailed with measurements, features, and functional elements."}
     ]
     
-    return call_ai_api(messages, max_tokens=4000)
+    return call_ai_api(messages, max_tokens=6000)
 
 def generate_mesh_code(enhanced_prompt):
     """Tier 2: Generate production-ready mesh code from enhanced specifications"""
-    system_message = """You are a precision 3D mesh code generator. Generate production-ready mesh definitions using the following format:
+    system_message = """You are a precision mesh generator creating REAL, MANUFACTURABLE 3D models.
 
-OUTPUT FORMAT (JSON):
+OUTPUT REQUIREMENTS:
+1. Generate COMPLETE, DETAILED meshes with sufficient vertices for smooth curves
+2. For curved surfaces: Use AT LEAST 16-32 vertices per circle/curve
+3. Include ALL functional features (handles, grips, holes, textures)
+4. Create proper topology (quads where possible, clean edge loops)
+5. Add geometric details like chamfers, fillets, grooves, patterns
+6. Make it look PROFESSIONAL, not like a basic primitive
+
+MESH DENSITY GUIDELINES:
+- Simple objects: 200-500 vertices minimum
+- Objects with curves: 500-2000 vertices
+- Complex objects: 2000-5000 vertices
+- Add detail where it matters (edges, functional areas)
+
+JSON FORMAT:
 {
-  "mesh_name": "descriptive_name",
-  "vertices": [[x1, y1, z1], [x2, y2, z2], ...],
-  "faces": [[v1, v2, v3], [v4, v5, v6], ...],
-  "normals": [[nx1, ny1, nz1], ...],
+  "mesh_name": "professional_descriptive_name",
+  "vertices": [
+    [x1, y1, z1], [x2, y2, z2], ... // Use floating point, position carefully
+  ],
+  "faces": [
+    [v1, v2, v3], [v4, v5, v6], ... // Triangle faces, counter-clockwise winding
+  ],
+  "normals": [
+    [nx1, ny1, nz1], ... // Unit vectors, properly calculated
+  ],
   "metadata": {
-    "units": "meters|millimeters",
+    "units": "millimeters",
     "scale": 1.0,
     "origin": [0, 0, 0],
-    "bounds": {"min": [x, y, z], "max": [x, y, z]}
+    "bounds": {"min": [x, y, z], "max": [x, y, z]},
+    "vertex_count": N,
+    "face_count": M,
+    "description": "Brief description of what this is"
   },
   "materials": {
-    "color": [r, g, b],
-    "roughness": 0.5,
+    "color": [r, g, b],  // Realistic colors (0-1 range)
+    "roughness": 0.3,    // Material finish
     "metallic": 0.0
   }
 }
 
-REQUIREMENTS:
-1. All vertices must use right-hand coordinate system
-2. Faces must follow counter-clockwise winding order
-3. Normals must be unit vectors
-4. Ensure watertight mesh (no holes)
-5. Optimize for manufacturing tolerances
-6. Include proper UV coordinates if textures needed
-7. Validate geometric consistency
+CRITICAL RULES:
+1. Generate REAL mesh coordinates - calculate actual vertex positions
+2. For cylinders: Create circular cross-sections with proper trigonometry
+3. For curves: Use bezier/spline approximations with enough segments
+4. Include fine details: chamfers use 4-8 vertices, rounded corners need proper arc subdivision
+5. Ensure watertight mesh: All edges shared by exactly 2 faces
+6. Center the model at origin, ground plane at Z=0 if applicable
 
-Generate ONLY valid JSON. Be mathematically precise. This will be used for real manufacturing."""
+EXAMPLES OF GOOD VS BAD:
+
+BAD (Generic cube):
+- 8 vertices only
+- No details
+- Looks like a test primitive
+
+GOOD (Detailed box with features):
+- 200+ vertices
+- Rounded corners with proper 8-vertex fillets
+- Chamfered edges
+- Textured surfaces (small geometric details)
+- Functional features (latches, hinges if applicable)
+
+Generate ONLY the JSON. Make it production-ready. This will be used for REAL manufacturing."""
 
     messages = [
         {"role": "system", "content": system_message},
-        {"role": "user", "content": f"Generate production-ready mesh code for:\n\n{enhanced_prompt}"}
+        {"role": "user", "content": f"Generate a highly detailed, production-ready 3D mesh for:\n\n{enhanced_prompt}\n\nCreate a COMPLETE mesh with all features, curves, and details described. Use enough vertices to make curves smooth and details visible. Return ONLY valid JSON."}
     ]
     
     return call_ai_api(messages, max_tokens=16000)
@@ -181,6 +237,27 @@ def parse_mesh_json(mesh_code_str):
             mesh_code_str = mesh_code_str[start:end].strip()
         
         mesh_data = json.loads(mesh_code_str)
+        
+        # Quality validation
+        vertex_count = len(mesh_data.get('vertices', []))
+        face_count = len(mesh_data.get('faces', []))
+        
+        warnings = []
+        
+        if vertex_count < 50:
+            warnings.append(f"⚠️ Low detail mesh: Only {vertex_count} vertices. Professional meshes typically have 200+ vertices.")
+        
+        if face_count < 50:
+            warnings.append(f"⚠️ Low polygon count: Only {face_count} faces. Consider requesting more detail.")
+        
+        if vertex_count < 12:
+            warnings.append("❌ CRITICAL: Mesh is too simple (basic primitive). Regenerate with 'add more detail and vertices' in prompt.")
+        
+        if warnings:
+            st.warning("Mesh Quality Issues:\n" + "\n".join(warnings))
+        else:
+            st.success(f"✅ Good quality mesh: {vertex_count} vertices, {face_count} faces")
+        
         return mesh_data
     except json.JSONDecodeError as e:
         st.error(f"Failed to parse mesh JSON: {e}")
@@ -367,22 +444,94 @@ def tab_create_mesh():
     with col1:
         st.subheader("Design Input")
         
+        # Add example prompts
+        st.markdown("**💡 Quick Examples** (click to load):")
+        example_col1, example_col2, example_col3 = st.columns(3)
+        
+        examples = {
+            "Water Bottle": "Design a professional 750ml sports water bottle with twist-off cap, ergonomic grip section with finger grooves in the middle, integrated carrying loop on cap, push-pull sport mouthpiece, volume measurement markers (250ml, 500ml, 750ml) embossed on the side, wide stable base (8cm diameter), and slight taper from base to neck for easy holding.",
+            "Desk Lamp": "Create a modern minimalist desk lamp with adjustable arm, round weighted base (15cm diameter, 2cm thick), flexible gooseneck section (30cm long, 1.5cm diameter), conical fabric shade (12cm top diameter, 18cm bottom diameter, 15cm tall), touch-sensitive power button on base, cable management channel in base, and rubber feet.",
+            "Phone Stand": "Design an adjustable phone stand with two-position angle support (45° and 60°), non-slip rubber contact points, cable management slot at the back (8mm wide), weighted base for stability (10cm x 7cm), foldable design with living hinge, fits phones 6-8cm wide, thickness accommodation up to 12mm with case.",
+            "Coffee Mug": "Create a 400ml ceramic coffee mug with ergonomic D-shaped handle positioned at 45° angle, comfortable 2mm rounded rim, exterior with subtle geometric texture pattern for grip, stable circular base (7.5cm diameter) with slight recess, gentle inward taper (2°) from rim to base, handle dimensions 12mm x 15mm cross-section.",
+            "Bookend": "Design a modern L-shaped bookend with 15cm tall vertical section, 12cm deep horizontal base, 10cm width, rounded corners (5mm radius), felt padding on bottom surface, decorative geometric cutout pattern on vertical face, 3mm thickness throughout, weighted base section (can be filled), minimal aesthetic.",
+        }
+        
+        with example_col1:
+            if st.button("💧 Water Bottle", use_container_width=True):
+                st.session_state.example_prompt = examples["Water Bottle"]
+        with example_col2:
+            if st.button("💡 Desk Lamp", use_container_width=True):
+                st.session_state.example_prompt = examples["Desk Lamp"]
+        with example_col3:
+            if st.button("📱 Phone Stand", use_container_width=True):
+                st.session_state.example_prompt = examples["Phone Stand"]
+        
+        example_col4, example_col5 = st.columns(2)
+        with example_col4:
+            if st.button("☕ Coffee Mug", use_container_width=True):
+                st.session_state.example_prompt = examples["Coffee Mug"]
+        with example_col5:
+            if st.button("📚 Bookend", use_container_width=True):
+                st.session_state.example_prompt = examples["Bookend"]
+        
+        st.divider()
+        
+        # Get the prompt value
+        prompt_value = st.session_state.get('example_prompt', '')
+        
         user_prompt = st.text_area(
             "Describe your 3D design:",
+            value=prompt_value,
             height=200,
-            placeholder="Example: Create a coffee mug with a curved handle, 10cm tall, 8cm diameter at the top, with a 2mm wall thickness. Add subtle grooves on the exterior for grip.",
-            help="Be as detailed as possible. Include dimensions, shapes, features, and any specific requirements."
+            placeholder="Example: Design a professional water bottle with a twist cap, ergonomic grip section in the middle, carrying loop integrated into the cap, sport mouthpiece, volume markers on the side, and a wide stable base. Make it 750ml capacity.",
+            help="Be specific about what you want. The AI will add technical details, but describe features, purpose, and rough dimensions.",
+            key="user_prompt_input"
         )
         
-        col_btn1, col_btn2 = st.columns(2)
+        # Clear example after loading
+        if 'example_prompt' in st.session_state and st.session_state.example_prompt == prompt_value:
+            del st.session_state.example_prompt
+        
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
         with col_btn1:
             generate_btn = st.button("🚀 Generate Mesh", type="primary", use_container_width=True)
         with col_btn2:
-            clear_btn = st.button("🗑️ Clear", use_container_width=True)
+            if st.session_state.generated_meshes:
+                regenerate_btn = st.button("🔄 More Detail", use_container_width=True, 
+                                          help="Regenerate last design with more vertices and detail")
+            else:
+                regenerate_btn = False
+        with col_btn3:
+            clear_btn = st.button("🗑️ Clear All", use_container_width=True)
         
         if clear_btn:
             st.session_state.generated_meshes = []
             st.rerun()
+        
+        if regenerate_btn and st.session_state.generated_meshes:
+            # Get the last generated mesh prompt
+            last_prompt = st.session_state.generated_meshes[0]['prompt']
+            enhanced_instruction = f"{last_prompt}\n\nIMPORTANT: Generate with MUCH MORE DETAIL - use at least 500-1000 vertices, add all curves, textures, and fine features described. Make it production-quality."
+            
+            with st.spinner("🔄 Regenerating with enhanced detail..."):
+                enhanced_prompt = enhance_prompt(enhanced_instruction)
+                
+                if enhanced_prompt:
+                    with st.spinner("🔄 Generating high-detail mesh..."):
+                        mesh_code = generate_mesh_code(enhanced_prompt + "\n\nCRITICAL: Use at least 500 vertices minimum. Add fine geometric details.")
+                        
+                        if mesh_code:
+                            mesh_data = parse_mesh_json(mesh_code)
+                            
+                            if mesh_data:
+                                st.session_state.generated_meshes.insert(0, {
+                                    'prompt': last_prompt + " [Enhanced Detail]",
+                                    'enhanced': enhanced_prompt,
+                                    'mesh_data': mesh_data,
+                                    'raw_code': mesh_code,
+                                    'timestamp': time.strftime("%Y-%m-%d %H:%M:%S")
+                                })
+                                st.rerun()
         
         if generate_btn and user_prompt:
             with st.spinner("🔄 Tier 1: Enhancing your prompt..."):
@@ -858,6 +1007,50 @@ def main():
     # Sidebar
     with st.sidebar:
         st.title("🎨 AI 3D Mesh Designer")
+        st.markdown("---")
+        
+        st.markdown("### 💡 Pro Tips for Best Results")
+        
+        with st.expander("✅ What Makes a Good Prompt", expanded=False):
+            st.markdown("""
+            **DO Include:**
+            - Specific features (handles, buttons, grips)
+            - Functional elements (drainage, ventilation)
+            - Rough dimensions or proportions
+            - Material/finish suggestions
+            - Purpose and use case
+            
+            **Example:**
+            "Water bottle with sport cap, grip section, 750ml"
+            
+            **NOT:**
+            "Make a bottle"
+            """)
+        
+        with st.expander("🎯 Mesh Quality Guide", expanded=False):
+            st.markdown("""
+            **Quality Indicators:**
+            - ✅ 200+ vertices: Professional
+            - ⚠️ 50-200 vertices: Basic
+            - ❌ <50 vertices: Too simple
+            
+            **If mesh is too simple:**
+            Add to your prompt: "with detailed features, smooth curves, and textured surfaces"
+            """)
+        
+        with st.expander("🚀 Speed Tips", expanded=False):
+            st.markdown("""
+            **Batch Processing:**
+            - Use 3-5 parallel workers
+            - Start with 10 designs to test
+            - Detailed prompts = better results
+            
+            **Single Designs:**
+            - More detail in prompt = better mesh
+            - Use example buttons to start
+            - Review enhanced specs before generation
+            """)
+        
         st.markdown("---")
         
         st.markdown("### 🎯 Features")
