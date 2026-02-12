@@ -4,5 +4,5 @@ numpy
 requests
 plotly
 trimesh
-
+scipy
 pygltflib
