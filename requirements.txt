@@ -6,3 +6,4 @@ plotly
 trimesh
 scipy
 pygltflib
+shapely
