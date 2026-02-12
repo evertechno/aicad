@@ -4,4 +4,4 @@ numpy
 requests
 plotly
 trimesh
-stl_viewer
+
