@@ -101,38 +101,225 @@ def get_cloudflare_api_config():
         st.error(f"API Configuration Error: {e}")
         return None, None
 
-def call_ai_api(messages, max_tokens=16000):
-    """Call Cloudflare AI API"""
+def call_ai_api(messages, max_tokens=16000, retries=3):
+    """Call Cloudflare AI API with robust error handling and retries"""
     account_id, auth_token = get_cloudflare_api_config()
     
     if not account_id or not auth_token:
         return None
     
+    # Try multiple times with exponential backoff
+    for attempt in range(retries):
+        try:
+            # Increase timeout based on attempt
+            timeout = 120 + (attempt * 60)  # 120s, 180s, 240s
+            
+            response = requests.post(
+                f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct",
+                headers={
+                    "Authorization": f"Bearer {auth_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "messages": messages,
+                    "max_tokens": max_tokens,
+                    "temperature": 0.7,
+                    "stream": False
+                },
+                timeout=timeout
+            )
+            
+            # Handle different response codes
+            if response.status_code == 200:
+                try:
+                    result = response.json()
+                    
+                    # Handle different response formats
+                    if result.get('success'):
+                        # Standard format
+                        if 'result' in result and 'response' in result['result']:
+                            return result['result']['response']
+                        # Alternative format
+                        elif 'result' in result and isinstance(result['result'], str):
+                            return result['result']
+                        # Direct response
+                        elif 'response' in result:
+                            return result['response']
+                        else:
+                            st.warning(f"⚠️ Unexpected response format. Attempting to extract content...")
+                            # Try to find any text content
+                            return str(result)
+                    else:
+                        error_msg = result.get('errors', ['Unknown error'])[0] if result.get('errors') else 'Unknown error'
+                        if attempt < retries - 1:
+                            st.warning(f"⚠️ Attempt {attempt + 1} failed: {error_msg}. Retrying...")
+                            time.sleep(2 ** attempt)  # Exponential backoff
+                            continue
+                        else:
+                            st.error(f"❌ API Error after {retries} attempts: {error_msg}")
+                            return None
+                
+                except json.JSONDecodeError as e:
+                    # Response is not JSON - try to use raw text
+                    st.warning(f"⚠️ Response is not JSON, attempting to use raw text...")
+                    raw_text = response.text
+                    
+                    # Check if it's a valid response
+                    if len(raw_text) > 50:  # Reasonable content
+                        return raw_text
+                    else:
+                        if attempt < retries - 1:
+                            st.warning(f"⚠️ Invalid response. Retrying... (attempt {attempt + 1}/{retries})")
+                            time.sleep(2 ** attempt)
+                            continue
+                        else:
+                            st.error(f"❌ Could not parse response after {retries} attempts")
+                            return None
+            
+            elif response.status_code == 408:
+                # Request timeout - try streaming approach
+                if attempt < retries - 1:
+                    st.warning(f"⏱️ Request timed out. Trying streaming approach... (attempt {attempt + 1}/{retries})")
+                    
+                    # Try with streaming enabled
+                    stream_result = call_ai_api_streaming(messages, max_tokens, account_id, auth_token)
+                    if stream_result:
+                        return stream_result
+                    
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    st.error(f"❌ Request timed out after {retries} attempts. Try reducing complexity or splitting the task.")
+                    return None
+            
+            elif response.status_code == 429:
+                # Rate limit
+                if attempt < retries - 1:
+                    wait_time = 2 ** (attempt + 2)  # 4s, 8s, 16s
+                    st.warning(f"⏳ Rate limited. Waiting {wait_time} seconds before retry...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    st.error(f"❌ Rate limit exceeded. Please wait a few minutes before trying again.")
+                    return None
+            
+            elif response.status_code == 401:
+                st.error("❌ Authentication failed. Check your Cloudflare API credentials.")
+                return None
+            
+            elif response.status_code == 403:
+                st.error("❌ Access forbidden. Check your Cloudflare API permissions.")
+                return None
+            
+            elif response.status_code >= 500:
+                # Server error
+                if attempt < retries - 1:
+                    st.warning(f"⚠️ Server error ({response.status_code}). Retrying... (attempt {attempt + 1}/{retries})")
+                    time.sleep(2 ** attempt)
+                    continue
+                else:
+                    st.error(f"❌ Server error ({response.status_code}). Try again later.")
+                    return None
+            
+            else:
+                st.error(f"❌ HTTP Error: {response.status_code}")
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                return None
+        
+        except requests.exceptions.Timeout:
+            if attempt < retries - 1:
+                st.warning(f"⏱️ Connection timeout. Retrying... (attempt {attempt + 1}/{retries})")
+                time.sleep(2 ** attempt)
+                continue
+            else:
+                st.error(f"❌ Connection timed out after {retries} attempts.")
+                return None
+        
+        except requests.exceptions.ConnectionError:
+            if attempt < retries - 1:
+                st.warning(f"🔌 Connection error. Retrying... (attempt {attempt + 1}/{retries})")
+                time.sleep(2 ** attempt)
+                continue
+            else:
+                st.error(f"❌ Could not connect to API after {retries} attempts. Check your internet connection.")
+                return None
+        
+        except Exception as e:
+            if attempt < retries - 1:
+                st.warning(f"⚠️ Unexpected error: {str(e)}. Retrying... (attempt {attempt + 1}/{retries})")
+                time.sleep(2 ** attempt)
+                continue
+            else:
+                st.error(f"❌ Unexpected error after {retries} attempts: {str(e)}")
+                return None
+    
+    return None
+
+def call_ai_api_streaming(messages, max_tokens, account_id, auth_token):
+    """Alternative streaming approach for long-running requests"""
     try:
         response = requests.post(
             f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/@cf/meta/llama-4-scout-17b-16e-instruct",
-            headers={"Authorization": f"Bearer {auth_token}"},
+            headers={
+                "Authorization": f"Bearer {auth_token}",
+                "Content-Type": "application/json"
+            },
             json={
                 "messages": messages,
                 "max_tokens": max_tokens,
-                "temperature": 0.7
+                "temperature": 0.7,
+                "stream": True
             },
-            timeout=180
+            timeout=300,
+            stream=True
         )
         
         if response.status_code == 200:
-            result = response.json()
-            if result.get('success'):
-                return result['result']['response']
-            else:
-                st.error(f"API Error: {result.get('errors', 'Unknown error')}")
-                return None
-        else:
-            st.error(f"HTTP Error: {response.status_code}")
-            return None
+            # Collect streamed response
+            collected_text = []
             
+            for line in response.iter_lines():
+                if line:
+                    line_text = line.decode('utf-8')
+                    
+                    # Handle SSE format
+                    if line_text.startswith('data: '):
+                        data_str = line_text[6:]  # Remove 'data: ' prefix
+                        
+                        if data_str == '[DONE]':
+                            break
+                        
+                        try:
+                            data = json.loads(data_str)
+                            
+                            # Extract text from various formats
+                            if 'response' in data:
+                                collected_text.append(data['response'])
+                            elif 'text' in data:
+                                collected_text.append(data['text'])
+                            elif 'content' in data:
+                                collected_text.append(data['content'])
+                            elif isinstance(data, str):
+                                collected_text.append(data)
+                        except json.JSONDecodeError:
+                            # Might be plain text
+                            if data_str.strip():
+                                collected_text.append(data_str)
+            
+            full_response = ''.join(collected_text)
+            
+            if len(full_response) > 50:
+                st.info("✅ Successfully received streaming response")
+                return full_response
+            else:
+                return None
+        
+        return None
+    
     except Exception as e:
-        st.error(f"Request failed: {str(e)}")
+        st.warning(f"Streaming approach failed: {str(e)}")
         return None
 
 # =================================================================================
@@ -404,6 +591,93 @@ def create_fallback_mesh(prompt):
     except Exception as e:
         st.error(f"Fallback mesh creation failed: {e}")
         return None
+
+def generate_template_code(prompt):
+    """Generate template-based code when API completely fails"""
+    prompt_lower = prompt.lower()
+    
+    # Detect type and generate appropriate template
+    if any(word in prompt_lower for word in ['gear', 'cog']):
+        return """import numpy as np
+import trimesh
+from trimesh import creation
+
+# Simple gear
+body = creation.cylinder(radius=25, height=8, sections=64)
+hole = creation.cylinder(radius=5, height=10, sections=32)
+hole.apply_translation([0, 0, -1])
+
+try:
+    final_mesh = trimesh.boolean.difference([body, hole])
+    if final_mesh.is_empty:
+        final_mesh = body
+except:
+    final_mesh = body
+"""
+    
+    elif any(word in prompt_lower for word in ['bolt', 'screw']):
+        return """import numpy as np
+import trimesh
+from trimesh import creation
+
+# Simple bolt
+head = creation.cylinder(radius=8, height=4, sections=6)
+shaft = creation.cylinder(radius=5, height=30, sections=32)
+shaft.apply_translation([0, 0, -30])
+
+try:
+    final_mesh = trimesh.boolean.union([head, shaft])
+    if final_mesh.is_empty:
+        final_mesh = trimesh.util.concatenate([head, shaft])
+except:
+    final_mesh = trimesh.util.concatenate([head, shaft])
+"""
+    
+    elif any(word in prompt_lower for word in ['housing', 'box', 'container']):
+        return """import numpy as np
+import trimesh
+from trimesh import creation
+
+# Simple housing
+outer = creation.box(extents=[40, 40, 30])
+inner = creation.box(extents=[34, 34, 28])
+inner.apply_translation([0, 0, 2])
+
+try:
+    final_mesh = trimesh.boolean.difference([outer, inner])
+    if final_mesh.is_empty:
+        final_mesh = outer
+except:
+    final_mesh = outer
+"""
+    
+    elif any(word in prompt_lower for word in ['cylinder', 'tube']):
+        return """import numpy as np
+import trimesh
+from trimesh import creation
+
+# Hollow cylinder
+outer = creation.cylinder(radius=15, height=50, sections=64)
+inner = creation.cylinder(radius=12, height=52, sections=64)
+inner.apply_translation([0, 0, -1])
+
+try:
+    final_mesh = trimesh.boolean.difference([outer, inner])
+    if final_mesh.is_empty:
+        final_mesh = outer
+except:
+    final_mesh = outer
+"""
+    
+    else:
+        # Generic default
+        return """import numpy as np
+import trimesh
+from trimesh import creation
+
+# Generic part
+final_mesh = creation.cylinder(radius=20, height=40, sections=64)
+"""
 
 def execute_cad_code(code_str):
     """Execute the generated CAD code and return the mesh"""
@@ -828,6 +1102,18 @@ def tab_create_meshes():
                     
                     st.write("Step 2/3: Generating trimesh code...")
                     cad_code = generate_cad_code(enhanced)
+                    
+                    if not cad_code:
+                        st.warning("⚠️ Full code generation failed. Trying simplified approach...")
+                        
+                        # Fallback: Try with simpler prompt
+                        simple_enhanced = f"Create a simple 3D mesh for: {user_prompt}. Use basic trimesh primitives only."
+                        cad_code = generate_cad_code(simple_enhanced)
+                        
+                        if not cad_code:
+                            st.error("❌ Could not generate code. Using template-based fallback...")
+                            # Ultimate fallback: Generate template code
+                            cad_code = generate_template_code(user_prompt)
                     
                     if cad_code:
                         st.success("✅ CAD code generated")
