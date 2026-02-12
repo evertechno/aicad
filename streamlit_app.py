@@ -196,78 +196,126 @@ Generate similarly detailed specs."""
 
 def generate_cad_code(enhanced_prompt):
     """Tier 2: Generate Python code using trimesh to create the actual mesh"""
-    system_message = """You are a 3D CAD code generator. Generate COMPLETE, RUNNABLE Python code using trimesh library.
+    system_message = """You are a 3D CAD code generator. Generate COMPLETE, RUNNABLE Python code using ONLY valid trimesh library functions.
 
-REQUIREMENTS:
-1. Import all necessary libraries at the top
-2. Use trimesh.creation for primitives (box, cylinder, sphere, capsule, cone, etc.)
-3. Apply transformations (trimesh.transformations)
-4. Use boolean operations (union, difference, intersection)
-5. Add surface details and features
-6. Return a single trimesh.Trimesh object named 'final_mesh'
-7. Code must be COMPLETE and EXECUTABLE
+CRITICAL: Use ONLY these validated trimesh.creation functions:
+- trimesh.creation.box(extents=[x, y, z])
+- trimesh.creation.cylinder(radius=r, height=h, sections=N)
+- trimesh.creation.sphere(radius=r, subdivisions=N)
+- trimesh.creation.capsule(height=h, radius=r, count=[N, N])
+- trimesh.creation.cone(radius=r, height=h, sections=N)
+- trimesh.creation.icosphere(subdivisions=N, radius=r)
+- trimesh.creation.annulus(r_min=inner, r_max=outer, height=h, sections=N)
 
-Available trimesh functions:
-- trimesh.creation.box(extents=[x,y,z])
-- trimesh.creation.cylinder(radius=r, height=h, sections=32)
-- trimesh.creation.sphere(radius=r, subdivisions=3)
-- trimesh.creation.capsule(height=h, radius=r)
-- trimesh.creation.cone(radius=r, height=h)
-- trimesh.creation.torus(major_radius=R, minor_radius=r)
-- trimesh.creation.icosphere(subdivisions=3, radius=r)
-- mesh.apply_translation([x,y,z])
-- mesh.apply_transform(matrix_4x4)
+TRANSFORMATIONS (always available):
+- mesh.apply_translation([x, y, z])
+- mesh.apply_scale(factor) or mesh.apply_scale([sx, sy, sz])
+- matrix = trimesh.transformations.rotation_matrix(angle_radians, [x, y, z], point=[0,0,0])
+- mesh.apply_transform(matrix)
+
+BOOLEAN OPERATIONS (may fail, wrap in try/except):
 - trimesh.boolean.union([mesh1, mesh2, ...])
 - trimesh.boolean.difference([mesh1, mesh2, ...])
 - trimesh.boolean.intersection([mesh1, mesh2, ...])
 
-CODE STRUCTURE:
+IMPORTANT RULES:
+1. NEVER use functions that don't exist (extrude, revolve, sweep, loft)
+2. Build complex shapes by combining primitives with boolean ops
+3. For threads/gears: approximate with arrays of small cylinders/boxes
+4. For curves: use multiple small primitives arranged in arc
+5. Wrap ALL boolean operations in try/except blocks
+6. Always check if result is valid before using
+7. Return variable MUST be named 'final_mesh'
+
+ERROR HANDLING TEMPLATE:
+```python
+try:
+    result = trimesh.boolean.union([part1, part2])
+    if result.is_empty or not result.is_valid:
+        result = part1  # Fallback to main part
+except Exception as e:
+    result = part1  # Fallback if boolean fails
+```
+
+COMPLETE WORKING EXAMPLE:
 ```python
 import numpy as np
 import trimesh
 from trimesh import creation, transformations
 
-# Create base shape
-base = creation.cylinder(radius=40, height=95, sections=64)
+# Create main body
+body = creation.cylinder(radius=25, height=50, sections=64)
 
-# Create features
-handle_arc = creation.torus(major_radius=25, minor_radius=6, sections=32)
-# ... more features
+# Create hole through center
+hole = creation.cylinder(radius=10, height=52, sections=32)
+hole.apply_translation([0, 0, -1])
 
-# Apply transformations
-handle_arc.apply_translation([40, 0, 45])
-# ... more transformations
+# Boolean operation with error handling
+try:
+    body_with_hole = trimesh.boolean.difference([body, hole])
+    if body_with_hole.is_empty:
+        body_with_hole = body
+except:
+    body_with_hole = body
 
-# Boolean operations
-body_with_handle = trimesh.boolean.union([base, handle_arc])
-inner_cavity = creation.cylinder(radius=37, height=92, sections=64)
-inner_cavity.apply_translation([0, 0, 3])
-final_body = trimesh.boolean.difference([body_with_handle, inner_cavity])
-
-# Add surface details
-grip_spheres = []
-for i in range(20):
-    sphere = creation.sphere(radius=0.5, subdivisions=2)
-    angle = (i / 20) * 2 * np.pi
-    sphere.apply_translation([
-        42 * np.cos(angle),
-        42 * np.sin(angle),
-        30 + i * 2
+# Add mounting holes (4 holes around perimeter)
+mounting_holes = []
+for i in range(4):
+    angle = (i / 4) * 2 * np.pi
+    m_hole = creation.cylinder(radius=2, height=6, sections=16)
+    m_hole.apply_translation([
+        18 * np.cos(angle),
+        18 * np.sin(angle),
+        22
     ])
-    grip_spheres.append(sphere)
+    mounting_holes.append(m_hole)
 
-details = trimesh.boolean.union(grip_spheres)
-final_mesh = trimesh.boolean.union([final_body, details])
+# Subtract mounting holes
+try:
+    all_holes = trimesh.util.concatenate(mounting_holes)
+    final_mesh = trimesh.boolean.difference([body_with_hole, all_holes])
+    if final_mesh.is_empty:
+        final_mesh = body_with_hole
+except:
+    final_mesh = body_with_hole
+
+# Ensure we have a valid mesh
+if not isinstance(final_mesh, trimesh.Trimesh) or final_mesh.is_empty:
+    final_mesh = body
 ```
 
-Generate COMPLETE working code. No placeholders. No comments like "add more features here". 
-Every feature mentioned in specs must be implemented.
-Use proper numeric values from the specifications.
-Return ONLY the Python code, no markdown backticks."""
+GEAR APPROXIMATION EXAMPLE:
+```python
+# Approximate gear teeth
+gear_body = creation.cylinder(radius=23, height=8, sections=64)
+teeth = []
+num_teeth = 20
+for i in range(num_teeth):
+    angle = (i / num_teeth) * 2 * np.pi
+    tooth = creation.box(extents=[4, 2, 8])
+    # Rotate and position
+    rot_matrix = transformations.rotation_matrix(angle, [0, 0, 1])
+    tooth.apply_transform(rot_matrix)
+    tooth.apply_translation([25 * np.cos(angle), 25 * np.sin(angle), 0])
+    teeth.append(tooth)
+
+try:
+    teeth_mesh = trimesh.util.concatenate(teeth)
+    gear = trimesh.boolean.union([gear_body, teeth_mesh])
+    if gear.is_empty:
+        gear = gear_body
+except:
+    gear = gear_body
+
+final_mesh = gear
+```
+
+Generate code following these patterns exactly. Use error handling for ALL boolean operations.
+Return ONLY Python code, no markdown, no explanations."""
 
     messages = [
         {"role": "system", "content": system_message},
-        {"role": "user", "content": f"Generate complete, runnable trimesh code for:\n\n{enhanced_prompt}\n\nCode must be fully functional with all features implemented. Use high-quality geometry (sections=64 for cylinders, subdivisions=4 for spheres)."}
+        {"role": "user", "content": f"Generate complete, runnable trimesh code with proper error handling for:\n\n{enhanced_prompt}\n\nUse sections=64 for smooth geometry. Wrap all boolean operations in try/except. Ensure final_mesh is always valid."}
     ]
     
     return call_ai_api(messages, max_tokens=16000)
@@ -275,6 +323,87 @@ Return ONLY the Python code, no markdown backticks."""
 # =================================================================================
 # MESH PROCESSING WITH TRIMESH
 # =================================================================================
+
+def create_fallback_mesh(prompt):
+    """Create a reasonable fallback mesh based on prompt keywords"""
+    try:
+        prompt_lower = prompt.lower()
+        
+        # Detect shape type from prompt
+        if any(word in prompt_lower for word in ['gear', 'cog', 'sprocket']):
+            # Create a simple gear
+            body = creation.cylinder(radius=25, height=8, sections=64)
+            hole = creation.cylinder(radius=5, height=10, sections=32)
+            hole.apply_translation([0, 0, -1])
+            try:
+                mesh = trimesh.boolean.difference([body, hole])
+                if mesh.is_empty:
+                    mesh = body
+            except:
+                mesh = body
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['bolt', 'screw', 'fastener']):
+            # Create a simple bolt
+            head = creation.cylinder(radius=8, height=4, sections=6)
+            head.apply_translation([0, 0, 0])
+            shaft = creation.cylinder(radius=5, height=30, sections=32)
+            shaft.apply_translation([0, 0, -30])
+            try:
+                mesh = trimesh.boolean.union([head, shaft])
+                if mesh.is_empty:
+                    mesh = trimesh.util.concatenate([head, shaft])
+            except:
+                mesh = trimesh.util.concatenate([head, shaft])
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['housing', 'mount', 'bracket']):
+            # Create a simple housing
+            outer = creation.box(extents=[40, 40, 30])
+            inner = creation.box(extents=[34, 34, 32])
+            inner.apply_translation([0, 0, 2])
+            try:
+                mesh = trimesh.boolean.difference([outer, inner])
+                if mesh.is_empty:
+                    mesh = outer
+            except:
+                mesh = outer
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['cap', 'lid', 'cover']):
+            # Create a simple cap
+            mesh = creation.cylinder(radius=20, height=10, sections=64)
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['cylinder', 'tube', 'pipe']):
+            # Create a cylinder
+            outer = creation.cylinder(radius=15, height=50, sections=64)
+            inner = creation.cylinder(radius=12, height=52, sections=64)
+            inner.apply_translation([0, 0, -1])
+            try:
+                mesh = trimesh.boolean.difference([outer, inner])
+                if mesh.is_empty:
+                    mesh = outer
+            except:
+                mesh = outer
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['sphere', 'ball']):
+            mesh = creation.sphere(radius=20, subdivisions=4)
+            return mesh
+        
+        elif any(word in prompt_lower for word in ['box', 'cube', 'block']):
+            mesh = creation.box(extents=[30, 30, 30])
+            return mesh
+        
+        else:
+            # Default: create a reasonable cylinder
+            mesh = creation.cylinder(radius=20, height=40, sections=64)
+            return mesh
+            
+    except Exception as e:
+        st.error(f"Fallback mesh creation failed: {e}")
+        return None
 
 def execute_cad_code(code_str):
     """Execute the generated CAD code and return the mesh"""
@@ -289,7 +418,7 @@ def execute_cad_code(code_str):
             end = code_str.find("```", start)
             code_str = code_str[start:end].strip()
         
-        # Create execution namespace
+        # Create execution namespace with all necessary imports
         namespace = {
             'np': np,
             'numpy': np,
@@ -302,30 +431,71 @@ def execute_cad_code(code_str):
         exec(code_str, namespace)
         
         # Get the final mesh
-        if 'final_mesh' in namespace:
-            mesh = namespace['final_mesh']
-            
-            # Validate it's a trimesh object
-            if not isinstance(mesh, trimesh.Trimesh):
-                st.error("Generated code didn't produce a valid trimesh.Trimesh object")
-                return None
-            
-            # Validate mesh quality
-            if not mesh.is_watertight:
-                st.warning("⚠️ Mesh is not watertight - may have holes or gaps")
-            
-            if mesh.is_empty:
-                st.error("❌ Generated mesh is empty")
-                return None
-            
-            return mesh
-        else:
-            st.error("Generated code doesn't define 'final_mesh' variable")
+        if 'final_mesh' not in namespace:
+            st.error("❌ Generated code doesn't define 'final_mesh' variable")
+            st.code(code_str, language='python')
             return None
+        
+        mesh = namespace['final_mesh']
+        
+        # Validate it's a trimesh object
+        if not isinstance(mesh, trimesh.Trimesh):
+            st.error(f"❌ 'final_mesh' is type {type(mesh)}, not trimesh.Trimesh")
+            return None
+        
+        # Check if mesh is empty
+        if mesh.is_empty:
+            st.error("❌ Generated mesh is empty")
+            return None
+        
+        # Check vertex count
+        if len(mesh.vertices) < 4:
+            st.error(f"❌ Generated mesh has too few vertices: {len(mesh.vertices)}")
+            return None
+        
+        # Validate mesh quality
+        if not mesh.is_watertight:
+            st.warning("⚠️ Mesh is not watertight - may have holes or gaps. This can happen with complex boolean operations.")
+        
+        # Fix mesh if possible
+        try:
+            if not mesh.is_watertight:
+                # Try to fill holes
+                trimesh.repair.fill_holes(mesh)
+                trimesh.repair.fix_normals(mesh)
+        except:
+            pass  # Repair might fail, that's ok
+        
+        st.success(f"✅ Mesh created: {len(mesh.vertices)} vertices, {len(mesh.faces)} faces")
+        
+        return mesh
             
-    except Exception as e:
-        st.error(f"Code execution failed: {str(e)}")
+    except SyntaxError as e:
+        st.error(f"❌ Python syntax error in generated code: {e}")
         st.code(code_str, language='python')
+        return None
+    except NameError as e:
+        st.error(f"❌ Undefined variable or function: {e}")
+        st.code(code_str, language='python')
+        return None
+    except AttributeError as e:
+        st.error(f"❌ Invalid trimesh function: {e}")
+        st.markdown("**Common issue:** AI tried to use a function that doesn't exist in trimesh")
+        st.code(code_str, language='python')
+        return None
+    except Exception as e:
+        st.error(f"❌ Code execution failed: {str(e)}")
+        st.code(code_str, language='python')
+        
+        # Try to provide helpful error context
+        error_str = str(e).lower()
+        if "boolean" in error_str:
+            st.info("💡 **Tip:** Boolean operations can fail with complex geometry. Try simpler shapes or check for overlapping meshes.")
+        elif "radius" in error_str or "height" in error_str:
+            st.info("💡 **Tip:** Check that all dimensions are positive numbers.")
+        elif "module" in error_str and "attribute" in error_str:
+            st.info("💡 **Tip:** AI tried to use a trimesh function that doesn't exist. This is a generation error.")
+        
         return None
 
 def analyze_mesh(mesh):
@@ -665,7 +835,20 @@ def tab_create_meshes():
                         st.write("Step 3/3: Executing code and creating mesh...")
                         mesh = execute_cad_code(cad_code)
                         
-                        if mesh:
+                        if mesh is None:
+                            st.warning("⚠️ AI-generated code failed. Attempting fallback generation...")
+                            
+                            # Try to create a reasonable fallback mesh based on prompt keywords
+                            mesh = create_fallback_mesh(user_prompt)
+                            
+                            if mesh:
+                                st.success("✅ Fallback mesh created successfully!")
+                                st.info("💡 The AI had trouble with complex operations. Using simplified geometry.")
+                            else:
+                                st.error("❌ Could not create mesh. Try simplifying your prompt or use an example.")
+                                status.update(label="❌ Failed", state="error")
+                                return
+                        else:
                             st.success("✅ Mesh created successfully!")
                             
                             analysis = analyze_mesh(mesh)
