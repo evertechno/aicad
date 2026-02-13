@@ -7,3 +7,5 @@ trimesh
 scipy
 pygltflib
 shapely
+scikit-image
+pyvista
